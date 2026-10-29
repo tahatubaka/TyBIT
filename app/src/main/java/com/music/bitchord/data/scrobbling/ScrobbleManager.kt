@@ -1,5 +1,6 @@
 package com.music.bitchord.data.scrobbling
 
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CancellationException
@@ -115,6 +116,7 @@ class ScrobbleManager(
     }
 
     private fun scrobbleSong(song: Song, durationSeconds: Int) {
+        if (AppSettings.privateSession) return
         val scrobbleArtist = song.artist.forScrobble()
         scope.launch {
             LastFM
@@ -134,6 +136,7 @@ class ScrobbleManager(
     }
 
     private fun updateNowPlaying(song: Song) {
+        if (AppSettings.privateSession) return
         val scrobbleArtist = song.artist.forScrobble()
         scope.launch {
             LastFM

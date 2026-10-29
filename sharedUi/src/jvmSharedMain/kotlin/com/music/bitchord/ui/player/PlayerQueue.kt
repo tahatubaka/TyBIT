@@ -78,6 +78,8 @@ import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.autoplaySectionStart
+import com.music.bitchord.playback.SmartShufflePicks
+import androidx.compose.runtime.collectAsState
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -785,8 +787,10 @@ private fun InlineQueueRow(
                 style = MaterialTheme.typography.titleMedium,
                 color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.92f),
             )
+            // ✦ marks what Smart Shuffle added, as Spotify marks its picks.
+            val picks by SmartShufflePicks.ids.collectAsState()
             Text(
-                text = song.artist,
+                text = if (song.videoId in picks) "✦ ${song.artist}" else song.artist,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.55f),
                 maxLines = 1,

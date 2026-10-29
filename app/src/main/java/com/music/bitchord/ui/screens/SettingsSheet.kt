@@ -61,6 +61,10 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.ui.res.pluralStringResource
+import com.music.bitchord.data.settings.HiddenMusic
+import com.music.bitchord.ui.components.HiddenMusicDialog
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MusicOff
@@ -243,6 +247,11 @@ fun SettingsScreen(
     val hideStatusBarInPlayer by AppSettings.hideStatusBarInPlayer.collectAsStateWithLifecycle()
     val hideSongStatus by AppSettings.hideSongStatus.collectAsStateWithLifecycle()
     val showQueueHistory by AppSettings.showQueueHistory.collectAsStateWithLifecycle()
+    val privateSessionUntil by AppSettings.privateSessionUntil.collectAsStateWithLifecycle()
+    val privateSession = privateSessionUntil > System.currentTimeMillis()
+    val hiddenMusic by HiddenMusic.entries.collectAsStateWithLifecycle()
+    var showingHiddenMusic by remember { mutableStateOf(false) }
+    if (showingHiddenMusic) HiddenMusicDialog(onDismiss = { showingHiddenMusic = false })
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val preferMusicOnly by AppSettings.preferMusicOnly.collectAsStateWithLifecycle()
@@ -1392,6 +1401,34 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setHideStatusBarInPlayer(!hideStatusBarInPlayer) },
+                )
+            }
+            val privateSessionTitle = stringResource(R.string.private_session)
+            row(privateSessionTitle, "private", "incognito", "history", "scrobble", "pribadi") {
+                SettingsRow(
+                    icon = Icons.Rounded.Lock,
+                    title = privateSessionTitle,
+                    subtitle = stringResource(R.string.private_session_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = privateSession,
+                            onCheckedChange = AppSettings::setPrivateSession,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setPrivateSession(!privateSession) },
+                )
+            }
+            val hiddenMusicTitle = stringResource(R.string.hidden_music)
+            row(hiddenMusicTitle, "hidden", "snooze", "block", "sembunyi") {
+                SettingsRow(
+                    icon = Icons.Rounded.VisibilityOff,
+                    title = hiddenMusicTitle,
+                    subtitle = pluralStringResource(R.plurals.hidden_music_count, hiddenMusic.size, hiddenMusic.size),
+                    onClick = { showingHiddenMusic = true },
                 )
             }
             val showQueueHistoryTitle = stringResource(R.string.show_queue_history)

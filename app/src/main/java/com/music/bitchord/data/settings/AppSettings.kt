@@ -350,6 +350,17 @@ object AppSettings {
     /** Repeat mode for the player — Off, All, or One. */
     val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
 
+    /**
+     * When the private session ends, as epoch ms; 0 when there is none. While
+     * one runs nothing is written to listening history, Replay, YouTube's
+     * history, Last.fm, ListenBrainz or Discord. It ends by itself after
+     * [PRIVATE_SESSION_MS], as Spotify's does, so it can't be forgotten on.
+     */
+    val privateSessionUntil = MutableStateFlow(0L)
+
+    /** Whether a private session is running right now. */
+    val privateSession: Boolean get() = privateSessionUntil.value > System.currentTimeMillis()
+
     /** Put the playing track's codec, bitrate and sample rate on the player. */
     val showNerdStats = MutableStateFlow(false)
 
@@ -784,6 +795,7 @@ object AppSettings {
         prefs = context.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
         this.authStore = authStore
         com.music.bitchord.data.spotify.LocalPlaylistStore.init(context)
+        HiddenMusic.init(context)
         readAll()
         watchConnection(context)
     }
@@ -852,6 +864,8 @@ object AppSettings {
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
+        privateSessionUntil.value = prefs.getLong(KEY_PRIVATE_SESSION_UNTIL, 0L)
+            .takeIf { it > System.currentTimeMillis() } ?: 0L
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         onboardingComplete.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
@@ -1075,6 +1089,12 @@ object AppSettings {
     fun setRepeatMode(value: Int) {
         repeatMode.value = value
         prefs.edit().putInt(KEY_REPEAT_MODE, value).apply()
+    }
+
+    fun setPrivateSession(on: Boolean) {
+        val until = if (on) System.currentTimeMillis() + PRIVATE_SESSION_MS else 0L
+        privateSessionUntil.value = until
+        prefs.edit().putLong(KEY_PRIVATE_SESSION_UNTIL, until).apply()
     }
 
     fun setAudioQualityWifi(value: AudioQuality) {
@@ -2015,6 +2035,8 @@ object AppSettings {
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_REPEAT_MODE = "repeat_mode"
+    private const val KEY_PRIVATE_SESSION_UNTIL = "private_session_until"
+    const val PRIVATE_SESSION_MS = 6 * 60 * 60 * 1000L
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"

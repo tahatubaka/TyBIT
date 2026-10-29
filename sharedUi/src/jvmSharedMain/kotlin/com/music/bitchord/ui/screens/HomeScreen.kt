@@ -142,6 +142,8 @@ fun HomeScreen(
     leadHero: Boolean = true,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
+    /** Drawn under the heading, above the feed — the phone's daylist card. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val recentsViewType by AppUi.host.homeRecentsViewType.collectAsStateWithLifecycle()
 
@@ -168,6 +170,7 @@ fun HomeScreen(
             if (title != null) {
                 item { HomeTitle(title) }
             }
+            header?.let { item(key = "header") { it() } }
             if (!signedIn && onSignIn != null) {
                 item {
                     SignInBanner(onSignIn = onSignIn, modifier = Modifier.padding(bottom = 8.dp))
@@ -521,8 +524,8 @@ private fun HomeTitle(title: String, modifier: Modifier = Modifier) {
 /** The wordmark's height against the heading's font size. */
 private const val LOGO_TO_FONT = 0.9f
 
-/** ic_logo's viewport, 730 x 484. */
-private const val LOGO_ASPECT = 730f / 484f
+/** ic_logo.png's proportions, 340 x 360. */
+private const val LOGO_ASPECT = 340f / 360f
 
 /**
  * Shared by the home feed, Explore and Library so headings line up across tabs.

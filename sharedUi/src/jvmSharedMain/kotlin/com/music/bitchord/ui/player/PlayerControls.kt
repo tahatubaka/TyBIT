@@ -565,8 +565,8 @@ internal fun PlayerActionRow(
     autoplayEnabled: Boolean,
     onToggleLyrics: () -> Unit,
     onToggleQueue: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeat: () -> Unit,
+    /** Steps the play mode: in order → shuffled → one song on repeat → in order. */
+    onCyclePlayMode: () -> Unit,
     onToggleAutoplay: () -> Unit,
     onOpenOutput: () -> Unit,
     onListenTogether: () -> Unit,
@@ -574,10 +574,10 @@ internal fun PlayerActionRow(
     onOpenListenTogetherMembers: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Sized for the wider of the two capsules — the three-up one — in both
-        // states. Computed for whichever was on screen it would change as they
-        // swap, and the lyrics and queue glyphs would slide with it.
-        val widestRow = BOTTOM_ACTION_SIZE * 2 + pillWidth(3)
+        // Sized for the wider of the two capsules in both states. Computed for
+        // whichever was on screen it would change as they swap, and the lyrics
+        // and queue glyphs would slide with it.
+        val widestRow = BOTTOM_ACTION_SIZE * 2 + pillWidth(2)
         val edgeInset = ((maxWidth - widestRow) / 4).coerceAtLeast(0.dp)
         // 0 with the capsule centred between lyrics and queue, 1 with it moved
         // over to where the lyrics glyph sits. Read only while placing, so the
@@ -636,36 +636,35 @@ internal fun PlayerActionRow(
                     // Spaced the same as the output/party capsule, so the two
                     // read as one control growing a segment.
                     Pill {
+                        // One segment for the three ways the queue can play.
+                        // Repeat-one wins the display: it is what you hear.
+                        val repeatingOne = repeatMode == RepeatModes.ONE
+                        val shuffled = shuffleEnabled && !repeatingOne
                         PillSegment(
-                            icon = BitChordIcons.Shuffle,
+                            icon = when {
+                                repeatingOne -> BitChordIcons.Repeat
+                                shuffled -> BitChordIcons.Shuffle
+                                else -> BitChordIcons.ListView
+                            },
+                            trailingLabel = "1".takeIf { repeatingOne },
                             contentDescription = stringResource(
-                                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
+                                when {
+                                    repeatingOne -> Res.string.repeat_one
+                                    shuffled -> Res.string.shuffle_on
+                                    else -> Res.string.play_in_order
+                                },
                             ),
-                            onClick = onToggleShuffle,
-                            highlighted = shuffleEnabled,
-                            haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                            onClick = onCyclePlayMode,
+                            highlighted = repeatingOne || shuffled,
+                            // The buzz tracks the edges of the cycle: leaving
+                            // in-order rises, returning to it falls, and the
+                            // step from shuffled to repeat-one is a selection.
+                            haptic = when {
+                                repeatingOne -> Haptic.ToggleOff
+                                shuffled -> Haptic.Select
+                                else -> Haptic.ToggleOn
+                            },
                             tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-                        )
-                        PillDivider()
-                        PillSegment(
-                            icon = if (repeatMode == RepeatModes.ONE) null else BitChordIcons.Repeat,
-                            label = if (repeatMode == RepeatModes.ONE) "1" else null,
-                            contentDescription = when (repeatMode) {
-                                RepeatModes.ONE -> stringResource(Res.string.repeat_one)
-                                RepeatModes.ALL -> stringResource(Res.string.repeat_all)
-                                else -> stringResource(Res.string.repeat_off)
-                            },
-                            onClick = onCycleRepeat,
-                            highlighted = repeatMode != RepeatModes.OFF,
-                            // Three states, so the buzz tracks the edges of the
-                            // cycle: leaving off rises, returning to off falls,
-                            // and the step between the two repeat modes is just
-                            // a selection.
-                            haptic = when (repeatMode) {
-                                RepeatModes.OFF -> Haptic.ToggleOn
-                                RepeatModes.ONE -> Haptic.ToggleOff
-                                else -> Haptic.Select
-                            },
                         )
                         PillDivider()
                         PillSegment(

@@ -121,6 +121,7 @@
     <string name="show_original_lyrics">Show original lyrics</string>
     <string name="shuffle_off">Shuffle off</string>
     <string name="shuffle_on">Shuffle on</string>
+    <string name="play_in_order">Play in order</string>
     <string name="stereo">Stereo</string>
     <string name="translate_lyrics">Translate lyrics</string>
     <string name="translating_lyrics_to">Translating to %1$s…</string>

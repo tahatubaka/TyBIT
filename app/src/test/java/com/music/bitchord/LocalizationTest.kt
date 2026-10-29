@@ -12,11 +12,10 @@ import javax.xml.parsers.DocumentBuilderFactory
 class LocalizationTest {
 
     @Test
-    fun supportedLanguages_containsVietnamese() {
-        val viLanguage = SUPPORTED_LANGUAGES.firstOrNull { it.tag == "vi" }
-        assertNotNull("Vietnamese language must be in SUPPORTED_LANGUAGES", viLanguage)
-        assertEquals(R.string.vietnamese, viLanguage?.nameRes)
-        assertEquals(R.string.vietnamese, languageDisplayNameRes("vi"))
+    fun supportedLanguages_areEnglishAndIndonesian() {
+        assertEquals(listOf("en", "id"), SUPPORTED_LANGUAGES.map { it.tag })
+        assertNotNull(SUPPORTED_LANGUAGES.firstOrNull { it.tag == "id" })
+        assertEquals(R.string.indonesian, languageDisplayNameRes("id"))
     }
 
     @Test
@@ -41,8 +40,6 @@ class LocalizationTest {
             val name = node.attributes.getNamedItem("android:name")?.nodeValue
             if (name != null) configuredLocales.add(name)
         }
-
-        assertTrue("locales_config.xml must include 'vi'", configuredLocales.contains("vi"))
 
         for (lang in SUPPORTED_LANGUAGES) {
             assertTrue(

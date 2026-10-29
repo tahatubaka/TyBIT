@@ -62,6 +62,10 @@ class LocaleStringsTest(private val tag: String) {
         internal fun tagToQualifier(tag: String): String = when (tag) {
             "zh-CN" -> "zh"
             "zh-TW" -> "zh-rTW"
+            // Android resolves these under their legacy ISO codes; a values-id
+            // folder is never matched on an Indonesian phone.
+            "id" -> "in"
+            "he" -> "iw"
             else -> tag
         }
     }

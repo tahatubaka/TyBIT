@@ -28,6 +28,8 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.PersonOff
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -185,6 +187,10 @@ fun SongActionsSheet(
     onCopyLog: (() -> Unit)? = null,
     /** Opens the timing control offered only by the main player's menu. */
     onLyricsOffset: (() -> Unit)? = null,
+    /** Hides this track — for that many days, or for good when null. Null hides the row. */
+    onHideSong: ((days: Int?) -> Unit)? = null,
+    /** Hides everything by this track's lead artist. Null hides the row. */
+    onHideArtist: (() -> Unit)? = null,
     /**
      * True while a lookup for this track's album/artist ids is still in
      * flight, so it isn't yet known whether "Open album" and "Open artist"
@@ -204,6 +210,13 @@ fun SongActionsSheet(
 ) {
     var showingSongInfo by remember(song.videoId) { mutableStateOf(false) }
     var pickingSleepTimer by remember { mutableStateOf(false) }
+    var askingHide by remember(song.videoId) { mutableStateOf(false) }
+    if (askingHide) onHideSong?.let { hide ->
+        HideSongDialog(
+            onChoose = { days -> askingHide = false; hide(days) },
+            onDismiss = { askingHide = false },
+        )
+    }
     val menu = presentation == SongActionsPresentation.Menu
     // The held-row menu has no pages to swap, so there Song Info opens as a dialog.
     if (menu && showingSongInfo) SongInfoDialog(song) { showingSongInfo = false }
@@ -332,6 +345,22 @@ fun SongActionsSheet(
             accent = palette.accent,
             onClick = onAddToQueue,
         )
+        if (onHideSong != null) {
+            ActionRow(
+                icon = Icons.Rounded.Block,
+                label = stringResource(R.string.hide_song),
+                accent = palette.accent,
+                onClick = { askingHide = true },
+            )
+        }
+        onHideArtist?.let {
+            ActionRow(
+                icon = Icons.Rounded.PersonOff,
+                label = stringResource(R.string.hide_artist),
+                accent = palette.accent,
+                onClick = it,
+            )
+        }
         when (val id = song.albumId) {
             null -> if (resolvingLinks) {
                 LoadingActionRow(Icons.Rounded.Album, stringResource(R.string.open_album), palette)

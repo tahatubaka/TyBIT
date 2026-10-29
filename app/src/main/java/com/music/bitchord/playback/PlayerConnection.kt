@@ -29,6 +29,7 @@ import com.music.bitchord.data.model.PlaybackSourceType
 import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
@@ -114,14 +115,41 @@ fun MediaController.toggleShuffle() {
     )
 }
 
+/**
+ * Sets repeat on the player and remembers it across restarts. PlaybackService
+ * watches the mode itself (it holds AutoPlay back during repeat-all), so this
+ * is all a caller has to do.
+ */
+fun MediaController.setRepeat(mode: Int) {
+    AppSettings.setRepeatMode(mode)
+    repeatMode = mode
+}
+
+/**
+ * The play mode a queue being started now gets — one of the player's three:
+ * in order, shuffled, or one song on repeat. In order unless its Shuffle button
+ * asked otherwise (see [QueueShuffle.takeForNewQueue]). Repeat-one carries over,
+ * since the mode button still shows it, except into a shuffled start, the two
+ * being alternatives; repeat-all, which that button no longer offers, never does.
+ * Returns whether the new queue is shuffled.
+ */
+private fun MediaController.playModeForNewQueue(): Boolean {
+    SmartShufflePicks.startQueue()
+    val shuffled = QueueShuffle.takeForNewQueue()
+    if (repeatMode == Player.REPEAT_MODE_ALL || (shuffled && repeatMode == Player.REPEAT_MODE_ONE)) {
+        setRepeat(Player.REPEAT_MODE_OFF)
+    }
+    return shuffled
+}
+
 /** Starts an album/playlist through the service-owned bounded context window. */
 suspend fun MediaController.playBoundedContext(
     songs: List<Song>,
     startIndex: Int,
     source: QueueSource,
     continuationToken: String?,
-    shuffle: Boolean = QueueShuffle.enabled.value,
 ) {
+    val shuffle = playModeForNewQueue()
     val token = BoundedContextRequests.put(
         BoundedContextRequests.Request(
             songs = songs,
@@ -871,10 +899,10 @@ suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
         SessionCommand(ACTION_CLEAR_BOUNDED_CONTEXT, Bundle.EMPTY),
         Bundle.EMPTY,
     ).await()
-    // A queue started while shuffle is on goes in shuffled rather than being
+    // A queue started from its Shuffle button goes in shuffled rather than being
     // played out of order — see [QueueShuffle]. The track the user picked still
     // leads, so it ends up at the top instead of at [startIndex].
-    val shuffled = QueueShuffle.enabled.value
+    val shuffled = playModeForNewQueue()
     val items = withContext(Dispatchers.Default) {
         val songsWithIds = songs.map { song ->
             if (song.queueEntryId == null) song.copy(queueEntryId = java.util.UUID.randomUUID().toString()) else song

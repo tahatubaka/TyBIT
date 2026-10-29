@@ -1,5 +1,6 @@
 package com.music.bitchord.data.stats
 
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
@@ -58,6 +59,8 @@ object ListeningRecorder {
      */
     @Synchronized
     fun onSample(song: Song, durationMs: Long) {
+        // A private session leaves no trace here, and so none in Replay or Daylist.
+        if (AppSettings.privateSession) return
         val now = System.currentTimeMillis()
         if (song.videoId != currentId) {
             // A new track anchors the clock and contributes nothing yet — see

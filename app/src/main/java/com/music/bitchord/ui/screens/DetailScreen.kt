@@ -50,6 +50,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import com.music.bitchord.data.model.LibraryState
 import androidx.compose.material.icons.rounded.Close
@@ -283,6 +284,8 @@ fun DetailScreen(
     onSongLongPress: (Song) -> Unit,
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
+    /** Shuffle with recommendations mixed in; null hides its button. */
+    onSmartShuffle: ((List<Song>) -> Unit)? = null,
     onSectionItemClick: (ShelfItem) -> Unit,
     onArtistClick: (String, String) -> Unit,
     onAddSuggested: (Song) -> Unit,
@@ -565,6 +568,7 @@ fun DetailScreen(
                         songs = songs,
                         onPlay = { onSongClick(songs, 0) },
                         onShuffle = { onShuffle(songs) },
+                        onSmartShuffle = onSmartShuffle?.let { smart -> { smart(songs) } },
                         // A folder's credit says where its tracks live, not who made them.
                         onArtistClick = onArtistClick.takeIf { folder == null },
                         onToggleLibrary = onToggleLibrary,
@@ -888,6 +892,7 @@ private fun ReleaseHeader(
     songs: List<Song>,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    onSmartShuffle: (() -> Unit)? = null,
     onArtistClick: ((String, String) -> Unit)?,
     onToggleLibrary: (() -> Unit)?,
     /** The Cached songs folder's: saves every track on it to Downloads. Null hides it. */
@@ -1047,6 +1052,15 @@ private fun ReleaseHeader(
                     haptic = Haptic.Resume,
                     size = RELEASE_SIDE_BUTTON,
                 )
+                onSmartShuffle?.let {
+                    CircleIconButton(
+                        icon = Icons.Rounded.AutoAwesome,
+                        contentDescription = stringResource(R.string.smart_shuffle),
+                        onClick = it,
+                        haptic = Haptic.Resume,
+                        size = RELEASE_SIDE_BUTTON,
+                    )
+                }
                 ActionPill(
                     icon = BitChordIcons.Play,
                     label = stringResource(R.string.play),

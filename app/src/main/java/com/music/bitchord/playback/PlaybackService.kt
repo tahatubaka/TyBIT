@@ -133,6 +133,7 @@ import com.music.bitchord.data.scrobbling.ListenBrainzManager
 import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.EqualizerMode
+import com.music.bitchord.data.settings.HiddenMusic
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.SourceStream
@@ -993,6 +994,19 @@ class PlaybackService : MediaLibraryService() {
             ) {
                 swappingMediaId = null
                 return
+            }
+
+            // A hidden track (see [HiddenMusic]) that the queue arrived at by
+            // itself is passed over. One the listener just started — a new
+            // queue begins with the track they tapped — still plays. Posted,
+            // not done inside the callback that is announcing this transition.
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED &&
+                mediaItem != null && HiddenMusic.isHidden(mediaItem.toSong())
+            ) {
+                scope.launch {
+                    if (exoPlayer.currentMediaItem?.mediaId != mediaItem.mediaId) return@launch
+                    if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem() else exoPlayer.pause()
+                }
             }
 
             // A receiver, if it is the speaker, is put on whatever became
@@ -6951,11 +6965,25 @@ class PlaybackService : MediaLibraryService() {
      * the socket every time the user typed a character into a button label.
      */
     private fun observeDiscord() {
+        // Ends a private session when its time is up — while something is
+        // playing this service is alive to do it; otherwise AppSettings drops
+        // an expired one the next time it loads.
+        scope.launch {
+            AppSettings.privateSessionUntil.collectLatest { until ->
+                if (until <= 0L) return@collectLatest
+                delay((until - System.currentTimeMillis()).coerceAtLeast(0L))
+                AppSettings.setPrivateSession(false)
+            }
+        }
         scope.launch {
             combine(
                 AppSettings.discordToken,
                 AppSettings.discordRpcEnabled,
-            ) { token, enabled -> token.takeIf { enabled && it.isNotBlank() } }
+                // A private session takes the presence down with the connection.
+                AppSettings.privateSessionUntil,
+            ) { token, enabled, privateUntil ->
+                token.takeIf { enabled && it.isNotBlank() && privateUntil <= System.currentTimeMillis() }
+            }
                 .distinctUntilChanged()
                 .collectLatest { token ->
                     // Torn down before anything is built, so switching accounts
@@ -7145,7 +7173,7 @@ class PlaybackService : MediaLibraryService() {
     private fun submitListenBrainzFinished(song: Song, startMs: Long, durationMs: Long?) {
         val lbEnabled = AppSettings.scrobblingAvailable && AppSettings.listenBrainzEnabled.value
         val lbToken = AppSettings.listenBrainzToken.value
-        if (!lbEnabled || lbToken.isBlank()) return
+        if (!lbEnabled || lbToken.isBlank() || AppSettings.privateSession) return
         val endMs = System.currentTimeMillis()
         scope.launch {
             ListenBrainzManager.submitFinished(lbToken, song, startMs, endMs, durationMs, AppSettings.listenBrainzPrimaryArtistOnly.value)
@@ -7156,7 +7184,7 @@ class PlaybackService : MediaLibraryService() {
     private fun submitListenBrainzPlayingNow(song: Song, positionMs: Long, durationMs: Long?) {
         val lbEnabled = AppSettings.scrobblingAvailable && AppSettings.listenBrainzEnabled.value
         val lbToken = AppSettings.listenBrainzToken.value
-        if (!lbEnabled || lbToken.isBlank()) return
+        if (!lbEnabled || lbToken.isBlank() || AppSettings.privateSession) return
         scope.launch {
             ListenBrainzManager.submitPlayingNow(lbToken, song, positionMs, durationMs, AppSettings.listenBrainzPrimaryArtistOnly.value)
         }

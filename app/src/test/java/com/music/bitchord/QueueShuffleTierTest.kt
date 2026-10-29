@@ -481,6 +481,19 @@ class QueueShuffleTierTest {
     }
 
     @Test
+    fun `a new queue plays in order unless its Shuffle button asked`() {
+        // Shuffle button on an album page: that one queue goes in shuffled.
+        QueueShuffle.enableForNextQueue()
+        assertTrue(QueueShuffle.takeForNewQueue())
+        assertTrue(QueueShuffle.enabled.value)
+
+        // The next list started with Play or a tapped track: in order, and the
+        // shuffle left on from before is switched off rather than carried over.
+        assertFalse(QueueShuffle.takeForNewQueue())
+        assertFalse(QueueShuffle.enabled.value)
+    }
+
+    @Test
     fun `header shuffle button flow establishes canonical context and restores strictly forward on shuffle OFF`() {
         val songs = (1..6).map { testSong("track-$it", QueueTier.CONTEXT, "entry-$it") }
         // Simulate tapping header Shuffle button:

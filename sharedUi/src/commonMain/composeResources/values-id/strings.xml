@@ -118,6 +118,7 @@
     <string name="show_original_lyrics">Tampilkan lirik asli</string>
     <string name="shuffle_off">Acak nonaktif</string>
     <string name="shuffle_on">Acak aktif</string>
+    <string name="play_in_order">Putar berurutan</string>
     <string name="stereo">Stereo</string>
     <string name="translate_lyrics">Terjemahkan lirik</string>
     <string name="translating_lyrics_to">Menerjemahkan ke %1$s…</string>

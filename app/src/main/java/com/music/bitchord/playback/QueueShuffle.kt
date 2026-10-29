@@ -176,8 +176,29 @@ object QueueShuffle {
     fun enableForNextQueue() {
         original = emptyList()
         clearCanonicalContext()
+        requestedForNextQueue = true
         _enabled.value = true
         AppSettings.setShuffleEnabled(true)
+    }
+
+    /** Set by [enableForNextQueue], spent by the next [takeForNewQueue]. */
+    @Volatile private var requestedForNextQueue = false
+
+    /**
+     * Whether a queue being started now goes in shuffled: only when its Shuffle
+     * button asked for it ([enableForNextQueue]). Any other start — Play, or a
+     * tapped track — plays the list in its own order, so a shuffle left on from
+     * the previous queue is switched off here rather than carried over.
+     */
+    fun takeForNewQueue(): Boolean {
+        if (requestedForNextQueue) {
+            requestedForNextQueue = false
+            return true
+        }
+        original = emptyList()
+        _enabled.value = false
+        AppSettings.setShuffleEnabled(false)
+        return false
     }
 
     /**

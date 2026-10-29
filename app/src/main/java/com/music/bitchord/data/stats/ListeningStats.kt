@@ -150,6 +150,11 @@ object ListeningStats {
             }
             track.ms += playedMs
             track.last = now
+            // Entries written before the daylist carry no part counters.
+            if (track.parts.size != DAY_PARTS) {
+                track.parts = MutableList(DAY_PARTS) { track.parts.getOrElse(it) { 0L } }
+            }
+            track.parts[dayPart(at.hour)] += playedMs
             // Filled in as it becomes known: a track queued from search reaches
             // the player with no album, and the lookup that finds one lands
             // while it is already playing. The entry was created without it.
@@ -316,6 +321,27 @@ object ListeningStats {
      * files, and the one being written to is flushed first so that the page
      * agrees with what has just been playing.
      */
+    /**
+     * The daylist's starting point: what this device plays in [part] of the
+     * day over the last few months, most-played first. Topped up with what is
+     * most played overall, since the part counters only began with the daylist
+     * and a fresh install has none.
+     */
+    suspend fun daylistSeeds(part: Int, limit: Int): List<TrackEntry> = withContext(Dispatchers.IO) {
+        flushAndAwait()
+        val merged = HashMap<String, TrackEntry>()
+        val thisMonth = YearMonth.now()
+        repeat(DAYLIST_MONTHS) { back ->
+            read(thisMonth.minusMonths(back.toLong()).toString())?.tracks?.forEach { entry ->
+                merged.merge(entry.id, entry.copy()) { a, b -> a.also { it.absorb(b) } }
+            }
+        }
+        val inPart = merged.values
+            .filter { it.parts.getOrElse(part) { 0L } > 0L }
+            .sortedByDescending { it.parts[part] }
+        (inPart + merged.values.sortedByDescending { it.ms }).distinctBy { it.id }.take(limit)
+    }
+
     suspend fun summary(period: ReplayPeriod): ReplaySummary = withContext(Dispatchers.IO) {
         flushAndAwait()
         val today = LocalDate.now()
@@ -851,10 +877,13 @@ data class TrackEntry(
     var last: Long = 0L,
     /** Per-day breakdown for weekly queries. Key: "YYYY-MM-DD". */
     var days: MutableMap<String, DayStats> = mutableMapOf(),
+    /** Ms played in each part of the day — see [dayPart]. Feeds the daylist. */
+    var parts: MutableList<Long> = MutableList(DAY_PARTS) { 0L },
 ) {
     fun absorb(other: TrackEntry) {
         ms += other.ms
         plays += other.plays
+        parts = MutableList(DAY_PARTS) { parts.getOrElse(it) { 0L } + other.parts.getOrElse(it) { 0L } }
         last = maxOf(last, other.last)
         if (album == null) album = other.album
         if (albumId == null) albumId = other.albumId
@@ -1077,4 +1106,19 @@ data class ReplaySummary(
         .filter { it.value > 0 }
         .maxByOrNull { it.value }
         ?.index
+}
+
+/** Morning, midday, late afternoon, evening, late night — the daylist's five. */
+const val DAY_PARTS = 5
+
+/** How many months back the daylist looks for what is played at this time. */
+private const val DAYLIST_MONTHS = 3
+
+/** Which of the [DAY_PARTS] an hour (0..23) falls in. */
+fun dayPart(hour: Int): Int = when (hour) {
+    in 5..10 -> 0
+    in 11..14 -> 1
+    in 15..17 -> 2
+    in 18..22 -> 3
+    else -> 4
 }

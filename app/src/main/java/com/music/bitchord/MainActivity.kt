@@ -153,6 +153,7 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibrarySort
+import com.music.bitchord.data.settings.HiddenMusic
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.components.AccountProfileSelector
 import com.music.bitchord.ui.navigation.AppDestination
@@ -207,6 +208,9 @@ import com.music.bitchord.playback.toSong
 import com.music.bitchord.playback.toDirectYouTubeMediaItem
 import com.music.bitchord.playback.toggleAutoplay
 import com.music.bitchord.playback.toggleShuffle
+import com.music.bitchord.playback.setRepeat
+import com.music.bitchord.playback.SmartShufflePicks
+import com.music.bitchord.playback.smartShufflePicks
 import com.music.bitchord.playback.upgradeQuality
 import com.music.bitchord.playback.revertToOriginal
 import com.music.bitchord.playback.swapToVersion
@@ -225,6 +229,7 @@ import com.music.bitchord.ui.components.ReorderPlaylistPage
 import com.music.bitchord.ui.components.LongPressOrigin
 import com.music.bitchord.ui.components.SongActionsPresentation
 import com.music.bitchord.ui.components.SongActionsSheet
+import com.music.bitchord.ui.components.DaylistCard
 import com.music.bitchord.ui.components.HeldContextMenu
 import com.music.bitchord.ui.components.HeldItem
 import androidx.media3.session.MediaController
@@ -2360,25 +2365,23 @@ private fun BitChordApp(
             signedIn = signedIn,
             likeStatus = likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
             onToggleLike = { viewModel.toggleLike(song.videoId) },
-            // The service owns both the queue and the Shuffle state. Keeping
-            // the toggle on that side prevents the UI from changing the icon
+            // One button, three modes: in order → shuffled → one song on
+            // repeat → in order. The service owns both the queue and the
+            // Shuffle state; toggling it there keeps the icon from changing
             // before its asynchronous reorder command has actually landed.
-            onToggleShuffle = { controller?.toggleShuffle() },
-            onCycleRepeat = {
+            onCyclePlayMode = {
                 controller?.let {
-                    val next = when (it.repeatMode) {
-                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                        else -> Player.REPEAT_MODE_OFF
+                    when {
+                        it.repeatMode == Player.REPEAT_MODE_ONE -> it.setRepeat(Player.REPEAT_MODE_OFF)
+                        QueueShuffle.enabled.value -> {
+                            it.toggleShuffle()
+                            it.setRepeat(Player.REPEAT_MODE_ONE)
+                        }
+                        else -> {
+                            it.setRepeat(Player.REPEAT_MODE_OFF)
+                            it.toggleShuffle()
+                        }
                     }
-                    // Persist the new repeat mode so it survives app restarts.
-                    AppSettings.setRepeatMode(next)
-                    // Nothing else to do here: PlaybackService watches the
-                    // repeat mode itself and takes AutoPlay's tracks out of
-                    // the queue for the duration of repeat-all — and, unlike
-                    // this screen, is still around to put them back when the
-                    // loop ends.
-                    it.repeatMode = next
                 }
             },
             onToggleAutoplay = {
@@ -2974,6 +2977,25 @@ private fun BitChordApp(
                                         playDetailSongs(songs, songs.indices.random())
                                     }
                                 },
+                                // Shuffle with recommendations mixed in, marked ✦ in
+                                // the queue. Played as the page's own list plus the
+                                // picks, so not through the page-backed bounded path,
+                                // which would rebuild the list from the page alone.
+                                onSmartShuffle = { songs: List<Song> ->
+                                    if (songs.isNotEmpty() && !ListenTogether.state.value.controlsLocked) {
+                                        Toast.makeText(context, R.string.smart_shuffle_loading, Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            val picks = smartShufflePicks(songs)
+                                            SmartShufflePicks.forNextQueue(picks.mapTo(HashSet()) { it.videoId })
+                                            QueueShuffle.enableForNextQueue()
+                                            playFrom(
+                                                songs.map(withAlbum) + picks,
+                                                songs.indices.random(),
+                                                QueueSource(page.title, PlaybackSourceType.BROWSE, page.browseId),
+                                            )
+                                        }
+                                    }
+                                }.takeIf { page.type == BrowseType.ALBUM || page.type == BrowseType.PLAYLIST },
                                 onSectionItemClick = { item ->
                                     item.browseId?.let { id ->
                                         viewModel.openDetail(
@@ -3052,6 +3074,11 @@ private fun BitChordApp(
                             )
                         } else when ((destination as? AppDestination.Tab)?.index ?: selectedTab) {
                             TAB_HOME -> HomeScreen(
+                                header = {
+                                    DaylistCard(onPlay = { songs, title ->
+                                        playFrom(songs, 0, QueueSource(title, PlaybackSourceType.HOME))
+                                    })
+                                },
                                 state = homeState,
                                 listState = homeListState,
                                 currentSong = player.song,
@@ -4203,6 +4230,22 @@ private fun BitChordApp(
                 onPlayNext = { playNext(song); songActions = null },
                 onAddToQueue = { addToQueue(song); songActions = null },
                 onStartRadio = { startRadio(song); songActions = null },
+                // Hiding what is playing skips it, as Spotify does; anywhere
+                // else the service passes it over when the queue gets there.
+                onHideSong = { days ->
+                    HiddenMusic.hideSong(song, days)
+                    songActions = null
+                    Toast.makeText(context, R.string.song_hidden, Toast.LENGTH_SHORT).show()
+                    controller?.takeIf { it.currentMediaItem?.mediaId == song.videoId && it.hasNextMediaItem() }
+                        ?.seekToNextMediaItem()
+                },
+                onHideArtist = {
+                    val name = HiddenMusic.hideArtist(song)
+                    songActions = null
+                    Toast.makeText(context, context.getString(R.string.artist_hidden, name), Toast.LENGTH_SHORT).show()
+                    controller?.takeIf { it.currentMediaItem?.mediaId == song.videoId && it.hasNextMediaItem() }
+                        ?.seekToNextMediaItem()
+                },
                 // Stays open: the row it replaces itself with is the
                 // progress, and closing the sheet would hide the only
                 // answer to "did that work?".
