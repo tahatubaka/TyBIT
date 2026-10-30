@@ -103,7 +103,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.music.bitchord.sharedui"
+    namespace = "com.tybit.sharedui"
     compileSdk = 36
     defaultConfig {
         minSdk = 26
@@ -112,6 +112,6 @@ android {
 
 compose.resources {
     publicResClass = true
-    packageOfResClass = "com.music.bitchord.sharedui.resources"
+    packageOfResClass = "com.tybit.sharedui.resources"
     generateResClass = always
 }

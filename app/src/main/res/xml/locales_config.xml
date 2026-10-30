@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tubaka offers English and Indonesian. Kept in step with SUPPORTED_LANGUAGES (see LocalizationTest). -->
+<!-- TyBIT offers English and Indonesian. Kept in step with SUPPORTED_LANGUAGES (see LocalizationTest). -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="en" />
     <locale android:name="id" />

@@ -15,7 +15,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BitChord"
+rootProject.name = "TyBIT"
 include(":shared")
 include(":sharedUi")
 
