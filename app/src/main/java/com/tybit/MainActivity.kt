@@ -154,6 +154,16 @@ import com.tybit.data.scrobbling.LastFM
 import com.tybit.data.settings.AppSettings
 import com.tybit.data.settings.LibrarySort
 import com.tybit.data.settings.HiddenMusic
+import com.tybit.data.settings.PlayMode
+import com.tybit.data.settings.CustomOrder
+import com.tybit.ui.player.CarModeScreen
+import com.tybit.data.settings.PlaylistFolders
+import com.tybit.data.settings.FOLDER_PREFIX
+import com.tybit.ui.components.FolderPickerDialog
+import com.tybit.ui.components.FolderManageDialog
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.material.icons.rounded.SwapVert
+import com.tybit.ui.screens.labelRes
 import com.tybit.data.settings.ThemeMode
 import com.tybit.ui.components.AccountProfileSelector
 import com.tybit.ui.navigation.AppDestination
@@ -659,6 +669,10 @@ private fun TyBitApp(
     var browseRenameInSheet by remember { mutableStateOf(false) }
     /** The playlist being rearranged, or null when the reorder page is shut. */
     var reorderTarget by remember { mutableStateOf<UserPlaylist?>(null) }
+    // A page being dragged into the listener's own order (see [CustomOrder]).
+    var customReorder by remember { mutableStateOf<String?>(null) }
+    // Car View over everything else — see [CarModeScreen].
+    var carMode by remember { mutableStateOf(false) }
     /** Its entries as YouTube has them now — fetched fresh when the sheet opens. */
     var reorderEntries by remember { mutableStateOf<UiState<List<Song>>>(UiState.Loading) }
     var reorderSaving by remember { mutableStateOf(false) }
@@ -721,6 +735,7 @@ private fun TyBitApp(
     // route — Back, a tab, another page over it — puts the list away with it.
     LaunchedEffect(detail?.browseId) {
         if (reorderTarget?.browseId != detail?.browseId) reorderTarget = null
+        if (customReorder != detail?.browseId) customReorder = null
     }
 
     SystemBarIcons(
@@ -882,6 +897,26 @@ private fun TyBitApp(
             thumbnailUrl = playlist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl,
             videoId = null,
             browseId = playlist.browseId,
+        )
+    }
+    // Playlist folders (see PlaylistFolders): a folder's card stands in for the
+    // playlists inside it, on the device shelf and on Playlists alike.
+    val playlistFolders by PlaylistFolders.folders.collectAsStateWithLifecycle()
+    var folderPicking by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var folderManaging by remember { mutableStateOf<String?>(null) }
+    val deviceShelfItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems
+    val accountPlaylistItems = ((libraryState as? UiState.Success)?.data?.shelves
+        ?.firstOrNull { it.title == YtMusicRepository.PLAYLISTS_SHELF }?.items).orEmpty()
+    val playlistsById = (deviceShelfItems + accountPlaylistItems)
+        .mapNotNull { item -> item.browseId?.let { it to item } }.toMap()
+    val folderedIds = playlistFolders.flatMapTo(HashSet()) { it.playlists }
+    val folderCards = playlistFolders.map { folder ->
+        ShelfItem(
+            title = folder.name,
+            subtitle = pluralStringResource(R.plurals.folder_playlists, folder.playlists.size, folder.playlists.size),
+            thumbnailUrl = folder.playlists.firstNotNullOfOrNull { playlistsById[it]?.thumbnailUrl },
+            videoId = null,
+            browseId = FOLDER_PREFIX + folder.id,
         )
     }
     // What a browse id is recorded under in Downloads.collections, when it names
@@ -1337,6 +1372,8 @@ private fun TyBitApp(
         source: QueueSource,
         boundedContext: Boolean = false,
         continuationToken: String? = null,
+        /** The album page's play mode; null for every other kind of start. */
+        mode: PlayMode? = null,
     ) {
         // A Spotify page lists songs it has not found on YouTube Music yet (or
         // never will); those can't be queued, so play the rest in their order.
@@ -1374,7 +1411,7 @@ private fun TyBitApp(
                 // service path is local-player-only; the service repeats this
                 // guard for commands that race a newly connected receiver.
                 if (boundedContext && !CastController.state.value.casting) {
-                    c.playBoundedContext(songs, index, source, continuationToken)
+                    c.playBoundedContext(songs, index, source, continuationToken, mode)
                 } else {
                     val result = QueueCoordinator.buildContextQueue(
                         currentTimeline = currentTimeline,
@@ -1383,7 +1420,7 @@ private fun TyBitApp(
                         selectedIndex = index,
                         contextSource = source,
                     )
-                    c.playSongs(result.timeline, result.startIndex)
+                    c.playSongs(result.timeline, result.startIndex, mode)
                 }
             }
             // Start playback in the mini-player; the user opens the full view by tapping it.
@@ -2012,6 +2049,12 @@ private fun TyBitApp(
     // card opens the same way from either.
     val onLibraryItemClick: (ShelfItem) -> Unit = { item ->
         item.browseId?.let { id ->
+            PlaylistFolders.byCardId(id)?.let { folder ->
+                navigator.push(
+                    AppRoute.LibraryShowAll(HomeShelf(folder.name, folder.playlists.mapNotNull(playlistsById::get))),
+                )
+                return@let
+            }
             if (id == SPOTIFY_BROWSE_ID) {
                 navigator.push(AppRoute.Spotify)
                 return@let
@@ -2202,6 +2245,13 @@ private fun TyBitApp(
         top = topBarContentPadding(),
         bottom = if (player.song != null) 210.dp else 140.dp,
     )
+    // Release Radar needs notifications: asked for once, at the first launch
+    // with it switched on (see ReleaseRadar.shouldAskPermission).
+    LaunchedEffect(Unit) {
+        if (com.tybit.data.releases.ReleaseRadar.shouldAskPermission(context)) {
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // What colour the page currently under the bars is. The fades either end
     // of the screen are flat colour wherever their blur has least to say, so
@@ -2367,25 +2417,6 @@ private fun TyBitApp(
             signedIn = signedIn,
             likeStatus = likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
             onToggleLike = { viewModel.toggleLike(song.videoId) },
-            // One button, three modes: in order → shuffled → one song on
-            // repeat → in order. The service owns both the queue and the
-            // Shuffle state; toggling it there keeps the icon from changing
-            // before its asynchronous reorder command has actually landed.
-            onCyclePlayMode = {
-                controller?.let {
-                    when {
-                        it.repeatMode == Player.REPEAT_MODE_ONE -> it.setRepeat(Player.REPEAT_MODE_OFF)
-                        QueueShuffle.enabled.value -> {
-                            it.toggleShuffle()
-                            it.setRepeat(Player.REPEAT_MODE_ONE)
-                        }
-                        else -> {
-                            it.setRepeat(Player.REPEAT_MODE_OFF)
-                            it.toggleShuffle()
-                        }
-                    }
-                }
-            },
             onToggleAutoplay = {
                 // PlaybackService owns the setting and queue extension so
                 // this path and the notification use exactly one loader.
@@ -2943,6 +2974,7 @@ private fun TyBitApp(
                                     ?.let { (it.songs as? UiState.Success)?.data.orEmpty() }
                                     ?.map(withAlbum)
                                     ?.takeIf { it.isNotEmpty() }
+                                    ?.let { CustomOrder.arrange(page.browseId, it) }
                                 val queue = latestSongs ?: songs.map(withAlbum)
                                 if (queue.isEmpty()) return
                                 val queueIndex = selected?.let { tapped ->
@@ -2954,10 +2986,12 @@ private fun TyBitApp(
                                     source,
                                     boundedContext = useBounded,
                                     continuationToken = latestPage?.continuation ?: page.continuation,
+                                    mode = AppSettings.playMode.value,
                                 )
                             }
                             // This page's songs being rearranged, drawn in place of its list.
                             val reordering = reorderTarget?.takeIf { it.browseId == page.browseId }
+                            val playMode by AppSettings.playMode.collectAsStateWithLifecycle()
                             DetailScreen(
                                 page = page,
                                 currentSong = player.song,
@@ -2978,6 +3012,21 @@ private fun TyBitApp(
                                         QueueShuffle.enableForNextQueue()
                                         playDetailSongs(songs, songs.indices.random())
                                     }
+                                },
+                                playMode = playMode,
+                                onCyclePlayMode = {
+                                    val next = AppSettings.playMode.value.next()
+                                    AppSettings.setPlayMode(next)
+                                    // Playing this very list: the change applies now,
+                                    // not only to the next Play.
+                                    val c = controller
+                                    if (c != null && player.song?.playbackSourceId == page.browseId) {
+                                        if ((next == PlayMode.SHUFFLE) != QueueShuffle.enabled.value) c.toggleShuffle()
+                                        c.setRepeat(
+                                            if (next == PlayMode.REPEAT_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_ALL,
+                                        )
+                                    }
+                                    Toast.makeText(context, context.getString(next.labelRes()), Toast.LENGTH_SHORT).show()
                                 },
                                 // Shuffle with recommendations mixed in, marked ✦ in
                                 // the queue. Played as the page's own list plus the
@@ -3047,7 +3096,7 @@ private fun TyBitApp(
                                 reorder = if (reordering != null) {
                                     { palette ->
                                         ReorderPlaylistPage(
-                                            playlist = reordering,
+                                            title = reordering.title,
                                             entries = reorderEntries,
                                             saving = reorderSaving,
                                             palette = palette,
@@ -3067,6 +3116,40 @@ private fun TyBitApp(
                                                     )
                                                     if (saved && reorderTarget == reordering) reorderTarget = null
                                                 }
+                                            },
+                                        )
+                                    }
+                                } else if (customReorder == page.browseId) {
+                                    { palette ->
+                                        val pageSongs = (page.songs as? UiState.Success)?.data.orEmpty()
+                                        // Each row keyed by its occurrence, so a track
+                                        // listed twice can still be dragged as two.
+                                        val arranged = remember(pageSongs) { CustomOrder.arrange(page.browseId, pageSongs) }
+                                        val entries = remember(arranged) {
+                                            arranged.zip(CustomOrder.keysOf(arranged)) { song, key -> song.copy(setVideoId = key) }
+                                        }
+                                        ReorderPlaylistPage(
+                                            title = page.title,
+                                            entries = UiState.Success(entries),
+                                            saving = false,
+                                            palette = palette,
+                                            contentPadding = PaddingValues(
+                                                bottom = listPadding.calculateBottomPadding(),
+                                            ),
+                                            onClose = { customReorder = null },
+                                            onSave = { reordered ->
+                                                val byKey = entries.indices.associate { entries[it].setVideoId to arranged[it] }
+                                                CustomOrder.set(page.browseId, reordered.mapNotNull { byKey[it.setVideoId] })
+                                                customReorder = null
+                                                showQueueNotice(context.getString(R.string.order_saved))
+                                            },
+                                            onReset = if (CustomOrder.has(page.browseId)) {
+                                                {
+                                                    CustomOrder.clear(page.browseId)
+                                                    customReorder = null
+                                                }
+                                            } else {
+                                                null
                                             },
                                         )
                                     }
@@ -3348,14 +3431,34 @@ private fun TyBitApp(
                             )
                             else -> LibraryScreen(
                                 signedIn = signedIn,
-                                state = libraryState,
+                                state = libraryState.let { st ->
+                                    if (st is UiState.Success) {
+                                        UiState.Success(
+                                            st.data.copy(
+                                                shelves = st.data.shelves.map { shelf ->
+                                                    if (shelf.title == YtMusicRepository.PLAYLISTS_SHELF) {
+                                                        shelf.copy(items = shelf.items.filterNot { it.browseId in folderedIds })
+                                                    } else {
+                                                        shelf
+                                                    }
+                                                },
+                                            ),
+                                        )
+                                    } else {
+                                        st
+                                    }
+                                },
                                 listState = libraryListState,
                                 onShelfItemClick = onLibraryItemClick,
                                 // Every shelf here has a menu behind it now — the account's
                                 // own playlists get rename and delete on top of what a saved
                                 // album or a Liked Music card gets. Holding an artist still
-                                // does nothing; see [onBrowseLongPress].
-                                onShelfItemLongPress = onBrowseLongPress,
+                                // does nothing; see [onBrowseLongPress]. A folder card
+                                // opens its own rename/delete instead.
+                                onShelfItemLongPress = { item ->
+                                    PlaylistFolders.byCardId(item.browseId.orEmpty())?.let { folderManaging = it.id }
+                                        ?: onBrowseLongPress(item)
+                                },
                                 onNewPlaylist = { creatingPlaylist = true },
                                 onImportSpotifyPlaylist = { showSpotifyImportDialog = true },
                                 onShowAll = { shelf -> navigator.push(AppRoute.LibraryShowAll(shelf)) },
@@ -3378,7 +3481,7 @@ private fun TyBitApp(
                                 pullState = libraryPull,
                                 contentPadding = listPadding,
                                 links = libraryLinks(),
-                                deviceItems = libraryDeviceItems(downloadedReleases) + localPlaylistItems,
+                                deviceItems = folderCards + deviceShelfItems.filterNot { it.browseId in folderedIds },
                             )
                         }
                     }
@@ -3686,6 +3789,15 @@ private fun TyBitApp(
                                 // with the app's other frosted overlays further
                                 // down — in the main hierarchy, where the haze
                                 // can see the content it blurs.
+                                if (isReleaseDetail && releaseSongs.isNotEmpty()) {
+                                    IconButton(onClick = { customReorder = detail.browseId }) {
+                                        Icon(
+                                            Icons.Rounded.SwapVert,
+                                            contentDescription = stringResource(R.string.reorder_songs),
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = { if (isLocalDetail) folderMenuOpen = true else songSortMenuOpen = true },
                                 ) {
@@ -4253,6 +4365,14 @@ private fun TyBitApp(
                     controller?.takeIf { it.currentMediaItem?.mediaId == song.videoId && it.hasNextMediaItem() }
                         ?.seekToNextMediaItem()
                 },
+                onCarMode = if (fromPlayer) {
+                    {
+                        songActions = null
+                        carMode = true
+                    }
+                } else {
+                    null
+                },
                 onHideArtist = {
                     val name = HiddenMusic.hideArtist(song)
                     songActions = null
@@ -4621,6 +4741,12 @@ private fun TyBitApp(
                 startRenaming = browseRenameInSheet,
                 onPlayNext = act(playSongsNext),
                 onAddToQueue = act(addSongsToQueue),
+                onMoveToFolder = target.browseId?.takeIf { target.type == BrowseType.PLAYLIST }?.let { id ->
+                    {
+                        browseActions = null
+                        folderPicking = id to target.title
+                    }
+                },
                 onPlay = act { songs -> play(songs, 0) }.takeIf { target.fromCard },
                 onShuffle = act { songs ->
                     // As on a release page: shuffle goes on before the queue
@@ -4945,6 +5071,19 @@ private fun TyBitApp(
                 onDismiss = { showLyricsSources = false },
             )
         }
+
+        folderPicking?.let { (id, title) -> FolderPickerDialog(id, title) { folderPicking = null } }
+        if (carMode) {
+            CarModeScreen(
+                song = player.song,
+                isPlaying = player.isPlaying,
+                onPlayPause = { controller?.let { if (it.isPlaying) it.pause() else it.play() } },
+                onPrevious = { controller?.seekToPrevious() },
+                onNext = { controller?.seekToNext() },
+                onClose = { carMode = false },
+            )
+        }
+        folderManaging?.let { id -> FolderManageDialog(id) { folderManaging = null } }
 
         if (songSortMenuOpen) {
             BackHandler { songSortMenuOpen = false }

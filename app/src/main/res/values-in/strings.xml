@@ -1378,6 +1378,27 @@
     <string name="greeting_part_2">Selamat sore</string>
     <string name="greeting_part_3">Selamat malam</string>
     <string name="greeting_part_4">Selamat malam</string>
+    <string name="play_mode_loop">Ulangi urut</string>
+    <string name="play_mode_shuffle">Acak</string>
+    <string name="play_mode_repeat_one">Ulangi 1</string>
+    <string name="reset_order">Urutan asli</string>
+    <string name="order_saved">Urutan disimpan</string>
+    <string name="genre_all">Semua</string>
+    <string name="move_to_folder">Pindahkan ke folder</string>
+    <string name="new_folder">Nama folder baru</string>
+    <string name="create_folder">Buat</string>
+    <string name="remove_from_folder">Keluarkan</string>
+    <string name="folder">Folder</string>
+    <string name="delete_folder">Hapus folder</string>
+    <plurals name="folder_playlists">
+        <item quantity="other">Folder · %d playlist</item>
+    </plurals>
+    <string name="car_mode">Mode mobil</string>
+    <string name="previous">Sebelumnya</string>
+    <string name="next">Berikutnya</string>
+    <string name="release_radar">Rilis baru</string>
+    <string name="release_radar_subtitle">Notifikasi saat artis yang sering Anda putar merilis lagu atau album baru.</string>
+    <string name="release_radar_title">Rilisan baru dari %1$s</string>
     <string name="daylist_title">daylist · %1$s %2$s</string>
     <string name="daylist_subtitle">Lagu yang biasa Anda putar di jam ini, ditambah yang baru</string>
     <string name="daylist_loading">Menyiapkan daylist…</string>

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SwapVert
@@ -155,6 +156,8 @@ fun BrowseActionsSheet(
      */
     isPinned: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
+    /** Files the playlist in a Library folder — see PlaylistFolders. Null hides the row. */
+    onMoveToFolder: (() -> Unit)? = null,
     onRename: ((String) -> Unit)? = null,
     /**
      * Opens the reorder page for one of the account's own playlists — set
@@ -281,6 +284,9 @@ fun BrowseActionsSheet(
                     stringResource(if (isPinned) R.string.unpin else R.string.pin),
                     onClick = it,
                 )
+            }
+            onMoveToFolder?.let {
+                ActionRow(Icons.Rounded.Folder, stringResource(R.string.move_to_folder), onClick = it)
             }
             if (onRename != null) {
                 ActionRow(Icons.Rounded.Edit, stringResource(R.string.rename)) {

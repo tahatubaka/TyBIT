@@ -123,7 +123,7 @@ object ArtistFacts {
 
     /** Whether a genre chart can be drawn at all on this build and these settings. */
     val genresAvailable: Boolean
-        get() = AppSettings.replayGenres.value && BuildConfig.LASTFM_API_KEY.isNotBlank()
+        get() = AppSettings.replayGenres.value
 
     // ── Reading ─────────────────────────────────────────────────────────────
     //
@@ -228,22 +228,14 @@ object ArtistFacts {
         dirty = true
     }
 
+    /**
+     * The artist's genres: Last.fm's tags when the build carries a key for it,
+     * MusicBrainz's otherwise — free, keyless, and asked once a second at most,
+     * which [REQUEST_SPACING_MS] already keeps to.
+     */
     private fun fetchGenres(name: String) {
-        val url = "https://ws.audioscrobbler.com/2.0/?method=artist.gettoptags" +
-            "&artist=${Uri.encode(name)}" +
-            "&api_key=${Uri.encode(BuildConfig.LASTFM_API_KEY)}" +
-            "&autocorrect=1&format=json"
-        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-        val body = Http.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return
-            response.body?.string()
-        } ?: return
-
-        val tags = runCatching {
-            Json.parseToJsonElement(body).jsonObject["toptags"]
-                ?.jsonObject?.get("tag")?.jsonArray
-                ?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content }
-        }.getOrNull().orEmpty()
+        val tags = if (BuildConfig.LASTFM_API_KEY.isNotBlank()) lastFmTags(name) else musicBrainzTags(name)
+        tags ?: return
 
         val genres = tags.asSequence()
             .mapNotNull { canonical(it) }
@@ -254,6 +246,46 @@ object ArtistFacts {
         val entry = known[key(name)] ?: StoredArtist(key = key(name))
         known[key(name)] = entry.copy(genres = genres, genresAt = System.currentTimeMillis())
         dirty = true
+    }
+
+    /** Most-voted MusicBrainz tags of the artist the name matches, or null on failure. */
+    private fun musicBrainzTags(name: String): List<String>? {
+        val url = "https://musicbrainz.org/ws/2/artist/?fmt=json&limit=1&query=" +
+            Uri.encode("artist:\"$name\"")
+        val request = Request.Builder().url(url).header("User-Agent", MUSICBRAINZ_AGENT).build()
+        val body = Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.string()
+        } ?: return null
+        return runCatching {
+            val artist = Json.parseToJsonElement(body).jsonObject["artists"]?.jsonArray?.firstOrNull()?.jsonObject
+                ?: return emptyList()
+            // A loose hit is a different artist; better no genre than theirs.
+            val score = artist["score"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+            if (score < 90) return emptyList()
+            artist["tags"]?.jsonArray.orEmpty()
+                .map { it.jsonObject }
+                .sortedByDescending { it["count"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0 }
+                .mapNotNull { it["name"]?.jsonPrimitive?.content }
+        }.getOrNull()
+    }
+
+    private fun lastFmTags(name: String): List<String>? {
+        val url = "https://ws.audioscrobbler.com/2.0/?method=artist.gettoptags" +
+            "&artist=${Uri.encode(name)}" +
+            "&api_key=${Uri.encode(BuildConfig.LASTFM_API_KEY)}" +
+            "&autocorrect=1&format=json"
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
+        val body = Http.client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.string()
+        } ?: return null
+
+        return runCatching {
+            Json.parseToJsonElement(body).jsonObject["toptags"]
+                ?.jsonObject?.get("tag")?.jsonArray
+                ?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content }
+        }.getOrNull().orEmpty()
     }
 
     /**
@@ -320,6 +352,8 @@ object ArtistFacts {
     private const val TAG = "TyBitArtists"
     private const val FILE_NAME = "artist_facts.json"
     private const val USER_AGENT = "TyBit/${BuildConfig.VERSION_NAME}"
+    // MusicBrainz asks every client to name itself and a way to reach its owner.
+    private const val MUSICBRAINZ_AGENT = "TyBIT/${BuildConfig.VERSION_NAME} ( https://github.com/tahatubaka )"
     private const val MAX_NAME_LENGTH = 120
     private const val MAX_GENRES_PER_ARTIST = 2
     private const val MAX_ARTISTS = 4_000

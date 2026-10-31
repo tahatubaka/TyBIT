@@ -30,6 +30,7 @@ import com.tybit.data.model.QueueTier
 import com.tybit.data.model.Song
 import com.tybit.data.model.artworkAt
 import com.tybit.data.settings.AppSettings
+import com.tybit.data.settings.PlayMode
 import com.tybit.data.sources.SourceKind
 import com.tybit.data.sources.SourceRegistry
 import com.tybit.data.sources.SourceResolver
@@ -126,19 +127,21 @@ fun MediaController.setRepeat(mode: Int) {
 }
 
 /**
- * The play mode a queue being started now gets — one of the player's three:
- * in order, shuffled, or one song on repeat. In order unless its Shuffle button
- * asked otherwise (see [QueueShuffle.takeForNewQueue]). Repeat-one carries over,
- * since the mode button still shows it, except into a shuffled start, the two
- * being alternatives; repeat-all, which that button no longer offers, never does.
- * Returns whether the new queue is shuffled.
+ * The shuffle and repeat a queue being started now gets. [mode] is the album
+ * page's (see [PlayMode]) and only a start from that page passes one: the list
+ * loops in order, loops shuffled, or repeats one song. Any other start plays in
+ * order without repeat — unless a Shuffle button asked for this one queue
+ * ([QueueShuffle.enableForNextQueue]). Returns whether the new queue is shuffled.
  */
-private fun MediaController.playModeForNewQueue(): Boolean {
+private fun MediaController.playModeForNewQueue(mode: PlayMode?): Boolean {
     SmartShufflePicks.startQueue()
-    val shuffled = QueueShuffle.takeForNewQueue()
-    if (repeatMode == Player.REPEAT_MODE_ALL || (shuffled && repeatMode == Player.REPEAT_MODE_ONE)) {
-        setRepeat(Player.REPEAT_MODE_OFF)
+    val shuffled = QueueShuffle.takeForNewQueue(shuffle = mode == PlayMode.SHUFFLE)
+    val repeat = when {
+        mode == null -> Player.REPEAT_MODE_OFF
+        mode == PlayMode.REPEAT_ONE && !shuffled -> Player.REPEAT_MODE_ONE
+        else -> Player.REPEAT_MODE_ALL
     }
+    if (repeatMode != repeat) setRepeat(repeat)
     return shuffled
 }
 
@@ -148,8 +151,9 @@ suspend fun MediaController.playBoundedContext(
     startIndex: Int,
     source: QueueSource,
     continuationToken: String?,
+    mode: PlayMode? = null,
 ) {
-    val shuffle = playModeForNewQueue()
+    val shuffle = playModeForNewQueue(mode)
     val token = BoundedContextRequests.put(
         BoundedContextRequests.Request(
             songs = songs,
@@ -893,7 +897,7 @@ fun mediaIdIn(uri: Uri): String? = if (uri.authority == "source") {
  * starts. Built off the main thread and handed to the player back on it, which
  * is where Media3 requires the call to be made.
  */
-suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
+suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int, mode: PlayMode? = null) {
     if (songs.isEmpty()) return
     sendCustomCommand(
         SessionCommand(ACTION_CLEAR_BOUNDED_CONTEXT, Bundle.EMPTY),
@@ -902,7 +906,7 @@ suspend fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
     // A queue started from its Shuffle button goes in shuffled rather than being
     // played out of order — see [QueueShuffle]. The track the user picked still
     // leads, so it ends up at the top instead of at [startIndex].
-    val shuffled = playModeForNewQueue()
+    val shuffled = playModeForNewQueue(mode)
     val items = withContext(Dispatchers.Default) {
         val songsWithIds = songs.map { song ->
             if (song.queueEntryId == null) song.copy(queueEntryId = java.util.UUID.randomUUID().toString()) else song

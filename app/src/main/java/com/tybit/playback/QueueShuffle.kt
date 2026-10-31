@@ -190,15 +190,16 @@ object QueueShuffle {
      * tapped track — plays the list in its own order, so a shuffle left on from
      * the previous queue is switched off here rather than carried over.
      */
-    fun takeForNewQueue(): Boolean {
+    fun takeForNewQueue(shuffle: Boolean = false): Boolean {
         if (requestedForNextQueue) {
             requestedForNextQueue = false
             return true
         }
+        // [shuffle]: the album page's own mode asked for it (see PlayMode).
         original = emptyList()
-        _enabled.value = false
-        AppSettings.setShuffleEnabled(false)
-        return false
+        _enabled.value = shuffle
+        AppSettings.setShuffleEnabled(shuffle)
+        return shuffle
     }
 
     /**

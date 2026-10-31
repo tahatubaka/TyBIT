@@ -342,6 +342,26 @@ object ListeningStats {
         (inPart + merged.values.sortedByDescending { it.ms }).distinctBy { it.id }.take(limit)
     }
 
+    /**
+     * The artists this device has played most over the last few months, as
+     * (browse id, name) — the ones Release Radar watches. Only tracks whose
+     * lead artist's page is known count, since that page is what gets checked.
+     */
+    suspend fun topArtists(limit: Int): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        flushAndAwait()
+        val played = HashMap<String, Pair<String, Long>>()
+        val thisMonth = YearMonth.now()
+        repeat(DAYLIST_MONTHS) { back ->
+            read(thisMonth.minusMonths(back.toLong()).toString())?.tracks?.forEach { entry ->
+                val id = entry.artistId ?: return@forEach
+                val name = entry.artist.substringBefore(" & ").substringBefore(", ")
+                val (_, ms) = played[id] ?: (name to 0L)
+                played[id] = name to (ms + entry.ms)
+            }
+        }
+        played.entries.sortedByDescending { it.value.second }.take(limit).map { it.key to it.value.first }
+    }
+
     suspend fun summary(period: ReplayPeriod): ReplaySummary = withContext(Dispatchers.IO) {
         flushAndAwait()
         val today = LocalDate.now()

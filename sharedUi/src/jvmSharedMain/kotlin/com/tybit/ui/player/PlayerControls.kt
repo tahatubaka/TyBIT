@@ -560,13 +560,9 @@ internal fun VolumeRow(
 internal fun PlayerActionRow(
     lyricsOpen: Boolean,
     queueOpen: Boolean,
-    shuffleEnabled: Boolean,
-    repeatMode: Int,
     autoplayEnabled: Boolean,
     onToggleLyrics: () -> Unit,
     onToggleQueue: () -> Unit,
-    /** Steps the play mode: in order → shuffled → one song on repeat → in order. */
-    onCyclePlayMode: () -> Unit,
     onToggleAutoplay: () -> Unit,
     onOpenOutput: () -> Unit,
     onListenTogether: () -> Unit,
@@ -636,37 +632,6 @@ internal fun PlayerActionRow(
                     // Spaced the same as the output/party capsule, so the two
                     // read as one control growing a segment.
                     Pill {
-                        // One segment for the three ways the queue can play.
-                        // Repeat-one wins the display: it is what you hear.
-                        val repeatingOne = repeatMode == RepeatModes.ONE
-                        val shuffled = shuffleEnabled && !repeatingOne
-                        PillSegment(
-                            icon = when {
-                                repeatingOne -> TyBitIcons.Repeat
-                                shuffled -> TyBitIcons.Shuffle
-                                else -> TyBitIcons.ListView
-                            },
-                            trailingLabel = "1".takeIf { repeatingOne },
-                            contentDescription = stringResource(
-                                when {
-                                    repeatingOne -> Res.string.repeat_one
-                                    shuffled -> Res.string.shuffle_on
-                                    else -> Res.string.play_in_order
-                                },
-                            ),
-                            onClick = onCyclePlayMode,
-                            highlighted = repeatingOne || shuffled,
-                            // The buzz tracks the edges of the cycle: leaving
-                            // in-order rises, returning to it falls, and the
-                            // step from shuffled to repeat-one is a selection.
-                            haptic = when {
-                                repeatingOne -> Haptic.ToggleOff
-                                shuffled -> Haptic.Select
-                                else -> Haptic.ToggleOn
-                            },
-                            tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-                        )
-                        PillDivider()
                         PillSegment(
                             icon = TyBitIcons.Infinity,
                             contentDescription = stringResource(

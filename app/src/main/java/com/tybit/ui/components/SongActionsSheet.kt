@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.PersonOff
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
@@ -191,6 +192,8 @@ fun SongActionsSheet(
     onHideSong: ((days: Int?) -> Unit)? = null,
     /** Hides everything by this track's lead artist. Null hides the row. */
     onHideArtist: (() -> Unit)? = null,
+    /** Opens Car View — offered from the player only. Null hides the row. */
+    onCarMode: (() -> Unit)? = null,
     /**
      * True while a lookup for this track's album/artist ids is still in
      * flight, so it isn't yet known whether "Open album" and "Open artist"
@@ -383,6 +386,9 @@ fun SongActionsSheet(
         }
         ActionRow(Icons.Rounded.Info, stringResource(R.string.song_info), accent = palette.accent) {
             showingSongInfo = true
+        }
+        onCarMode?.let {
+            ActionRow(Icons.Rounded.DirectionsCar, stringResource(R.string.car_mode), accent = palette.accent, onClick = it)
         }
         if (showSleepTimer) {
             ActionRow(

@@ -692,8 +692,6 @@ fun NowPlayingScreen(
      * freshest duration is.
      */
     onSeekFraction: (Float) -> Unit,
-    /** In order → shuffled → one song on repeat → in order. */
-    onCyclePlayMode: () -> Unit,
     onToggleAutoplay: () -> Unit,
     onJumpTo: (Int) -> Unit,
     onRemoveFromQueue: (Int) -> Unit,
@@ -1493,12 +1491,9 @@ fun NowPlayingScreen(
         PlayerActionRow(
             lyricsOpen = lyricsOpen,
             queueOpen = queueOpen,
-            shuffleEnabled = shuffleEnabled,
-            repeatMode = repeatMode,
             autoplayEnabled = autoplayEnabled,
             onToggleLyrics = toggleLyrics,
             onToggleQueue = toggleQueue,
-            onCyclePlayMode = onCyclePlayMode,
             onToggleAutoplay = onToggleAutoplay,
             onOpenOutput = openAudioOutput,
             onListenTogether = onListenTogether,

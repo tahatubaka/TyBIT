@@ -117,6 +117,7 @@ class TyBitApplication : Application(), SingletonImageLoader.Factory {
             CoroutineScope(Dispatchers.IO).launch { Innertube.ensureSessionScope() }
         }
         AppSettings.init(this, authStore)
+        com.tybit.data.releases.ReleaseRadar.schedule(this)
         // Before anything resolves a track: an addon with `checkValidLossless`
         // is gated on this, and the gate reads "no" until it has looked.
         com.tybit.playback.audio.LosslessOutput.init(this)

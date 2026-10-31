@@ -62,6 +62,7 @@ import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.ui.res.pluralStringResource
 import com.tybit.data.settings.HiddenMusic
 import com.tybit.ui.components.HiddenMusicDialog
@@ -248,6 +249,7 @@ fun SettingsScreen(
     val hideSongStatus by AppSettings.hideSongStatus.collectAsStateWithLifecycle()
     val showQueueHistory by AppSettings.showQueueHistory.collectAsStateWithLifecycle()
     val privateSessionUntil by AppSettings.privateSessionUntil.collectAsStateWithLifecycle()
+    val releaseRadar by AppSettings.releaseRadar.collectAsStateWithLifecycle()
     val privateSession = privateSessionUntil > System.currentTimeMillis()
     val hiddenMusic by HiddenMusic.entries.collectAsStateWithLifecycle()
     var showingHiddenMusic by remember { mutableStateOf(false) }
@@ -1420,6 +1422,29 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setPrivateSession(!privateSession) },
+                )
+            }
+            val releaseRadarTitle = stringResource(R.string.release_radar)
+            row(releaseRadarTitle, "release", "radar", "new", "notification", "rilis") {
+                val setReleaseRadar: (Boolean) -> Unit = { on ->
+                    AppSettings.setReleaseRadar(on)
+                    com.tybit.data.releases.ReleaseRadar.schedule(context)
+                }
+                SettingsRow(
+                    icon = Icons.Rounded.NewReleases,
+                    title = releaseRadarTitle,
+                    subtitle = stringResource(R.string.release_radar_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = releaseRadar,
+                            onCheckedChange = setReleaseRadar,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { setReleaseRadar(!releaseRadar) },
                 )
             }
             val hiddenMusicTitle = stringResource(R.string.hidden_music)

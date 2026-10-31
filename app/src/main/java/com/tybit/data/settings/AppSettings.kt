@@ -131,6 +131,19 @@ enum class LocalMusicSort {
  * DetailScreen.kt holds the sort itself. Persisted app-wide rather than per
  * page: one choice, kept until the user makes another.
  */
+/**
+ * How an album or playlist plays when started from its own page — the one
+ * button there that cycles: the list in order on a loop, shuffled, or one song
+ * on repeat. Queues started anywhere else play plainly in order.
+ */
+enum class PlayMode {
+    LOOP_ORDER,
+    SHUFFLE,
+    REPEAT_ONE;
+
+    fun next(): PlayMode = entries[(ordinal + 1) % entries.size]
+}
+
 enum class SongSort {
     DEFAULT,
     TITLE_ASC,
@@ -357,6 +370,12 @@ object AppSettings {
      * [PRIVATE_SESSION_MS], as Spotify's does, so it can't be forgotten on.
      */
     val privateSessionUntil = MutableStateFlow(0L)
+
+    /** The album/playlist page's play mode — see [PlayMode]. */
+    val playMode = MutableStateFlow(PlayMode.LOOP_ORDER)
+
+    /** Release Radar: notify of new releases by the artists played most. */
+    val releaseRadar = MutableStateFlow(true)
 
     /** Whether a private session is running right now. */
     val privateSession: Boolean get() = privateSessionUntil.value > System.currentTimeMillis()
@@ -796,6 +815,8 @@ object AppSettings {
         this.authStore = authStore
         com.tybit.data.spotify.LocalPlaylistStore.init(context)
         HiddenMusic.init(context)
+        CustomOrder.init(context)
+        PlaylistFolders.init(context)
         readAll()
         watchConnection(context)
     }
@@ -866,6 +887,9 @@ object AppSettings {
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         privateSessionUntil.value = prefs.getLong(KEY_PRIVATE_SESSION_UNTIL, 0L)
             .takeIf { it > System.currentTimeMillis() } ?: 0L
+        playMode.value = runCatching { PlayMode.valueOf(prefs.getString(KEY_PLAY_MODE, null) ?: "") }
+            .getOrDefault(PlayMode.LOOP_ORDER)
+        releaseRadar.value = prefs.getBoolean(KEY_RELEASE_RADAR, true)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         onboardingComplete.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
@@ -1089,6 +1113,16 @@ object AppSettings {
     fun setRepeatMode(value: Int) {
         repeatMode.value = value
         prefs.edit().putInt(KEY_REPEAT_MODE, value).apply()
+    }
+
+    fun setReleaseRadar(value: Boolean) {
+        releaseRadar.value = value
+        prefs.edit().putBoolean(KEY_RELEASE_RADAR, value).apply()
+    }
+
+    fun setPlayMode(value: PlayMode) {
+        playMode.value = value
+        prefs.edit().putString(KEY_PLAY_MODE, value.name).apply()
     }
 
     fun setPrivateSession(on: Boolean) {
@@ -2036,6 +2070,8 @@ object AppSettings {
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_PRIVATE_SESSION_UNTIL = "private_session_until"
+    private const val KEY_PLAY_MODE = "play_mode"
+    private const val KEY_RELEASE_RADAR = "release_radar"
     const val PRIVATE_SESSION_MS = 6 * 60 * 60 * 1000L
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"

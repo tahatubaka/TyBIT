@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +58,6 @@ import com.tybit.R
 import com.tybit.data.model.ROW_ART_PX
 import com.tybit.data.model.Song
 import com.tybit.data.model.UiState
-import com.tybit.data.model.UserPlaylist
 import com.tybit.data.model.artworkAt
 import com.tybit.ui.theme.ArtworkPalette
 
@@ -80,7 +80,7 @@ import com.tybit.ui.theme.ArtworkPalette
  */
 @Composable
 fun ReorderPlaylistPage(
-    playlist: UserPlaylist,
+    title: String,
     entries: UiState<List<Song>>,
     saving: Boolean,
     palette: ArtworkPalette,
@@ -88,6 +88,8 @@ fun ReorderPlaylistPage(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
+    /** Puts the page's own order back; null hides the button. */
+    onReset: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onClose)
     val original = (entries as? UiState.Success)?.data.orEmpty()
@@ -115,12 +117,17 @@ fun ReorderPlaylistPage(
                     color = palette.onBackground,
                 )
                 Text(
-                    text = playlist.title,
+                    text = title,
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.onBackgroundVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            onReset?.let {
+                TextButton(onClick = it, enabled = !saving) {
+                    Text(stringResource(R.string.reset_order), color = palette.onBackground)
+                }
             }
             // The page's filled pill — white with dark text, as its Play is.
             Button(

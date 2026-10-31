@@ -146,6 +146,16 @@ import com.tybit.data.model.ROW_ART_PX
 import com.tybit.data.model.HomeShelf
 import com.tybit.data.model.ShelfItem
 import com.tybit.data.settings.SongSort
+import com.tybit.data.settings.PlayMode
+import com.tybit.data.settings.CustomOrder
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.tybit.data.stats.ArtistFacts
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Shuffle
 import com.tybit.data.model.Song
 import com.tybit.data.model.SubscriptionState
 import com.tybit.data.model.UiState
@@ -284,6 +294,9 @@ fun DetailScreen(
     onSongLongPress: (Song) -> Unit,
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
+    /** The album page's play mode and the button that cycles it — see [PlayMode]. */
+    playMode: PlayMode = PlayMode.LOOP_ORDER,
+    onCyclePlayMode: () -> Unit = {},
     /** Shuffle with recommendations mixed in; null hides its button. */
     onSmartShuffle: ((List<Song>) -> Unit)? = null,
     onSectionItemClick: (ShelfItem) -> Unit,
@@ -352,8 +365,38 @@ fun DetailScreen(
     // A folder keeps its own sort — the one its top bar menu sets — rather
     // than the per-page one a release takes.
     val folderSort = folder?.sort
-    val songs = remember(rawSongs, songSort, folderSort) {
-        if (folderSort != null) rawSongs.sortedForLibrary(folderSort) else rawSongs.sortedForDetail(songSort)
+    // The listener's own dragged order stands in for the page's running order.
+    val customOrders by CustomOrder.orders.collectAsStateWithLifecycle()
+    val orderedSongs = remember(rawSongs, songSort, folderSort, customOrders) {
+        if (folderSort != null) {
+            rawSongs.sortedForLibrary(folderSort)
+        } else {
+            CustomOrder.arrange(page.browseId, rawSongs, customOrders).sortedForDetail(songSort)
+        }
+    }
+    // Genre chips over a playlist's songs, from each lead artist's genres as
+    // ArtistFacts knows them; the artists are looked up as the page opens and
+    // the chips fill in as answers arrive.
+    val factsRevision by ArtistFacts.revision.collectAsStateWithLifecycle()
+    var genreFilter by remember(page.browseId) { mutableStateOf<String?>(null) }
+    val offersGenres = page.type != BrowseType.ARTIST && folder == null && rawSongs.size >= GENRE_MIN_SONGS
+    LaunchedEffect(page.browseId, offersGenres, rawSongs.size) {
+        if (offersGenres) rawSongs.map { it.leadArtist() }.distinct().forEach(ArtistFacts::noticed)
+    }
+    val genres = remember(orderedSongs, factsRevision, offersGenres) {
+        if (!offersGenres) {
+            emptyList()
+        } else {
+            orderedSongs.flatMap { ArtistFacts.genresFor(it.leadArtist()) }
+                .groupingBy { it }.eachCount()
+                .entries.sortedByDescending { it.value }
+                .take(GENRE_CHIPS)
+                .map { it.key }
+        }
+    }
+    val songs = remember(orderedSongs, genreFilter, factsRevision) {
+        val genre = genreFilter ?: return@remember orderedSongs
+        orderedSongs.filter { genre in ArtistFacts.genresFor(it.leadArtist()) }
     }
     // What a numbered row shows regardless of [songSort] — an album's track
     // numbers are the sleeve's own and must not relabel themselves to match
@@ -567,7 +610,8 @@ fun DetailScreen(
                         canvas = canvas,
                         songs = songs,
                         onPlay = { onSongClick(songs, 0) },
-                        onShuffle = { onShuffle(songs) },
+                        playMode = playMode,
+                        onCyclePlayMode = onCyclePlayMode,
                         onSmartShuffle = onSmartShuffle?.let { smart -> { smart(songs) } },
                         // A folder's credit says where its tracks live, not who made them.
                         onArtistClick = onArtistClick.takeIf { folder == null },
@@ -588,6 +632,12 @@ fun DetailScreen(
                         palette = palette,
                         type = page.type,
                     )
+                }
+            }
+
+            if (genres.size >= 2) {
+                item(key = "genres") {
+                    GenreChips(genres, selected = genreFilter, onSelect = { genreFilter = it })
                 }
             }
 
@@ -891,7 +941,8 @@ private fun ReleaseHeader(
     canvas: CanvasArtwork?,
     songs: List<Song>,
     onPlay: () -> Unit,
-    onShuffle: () -> Unit,
+    playMode: PlayMode,
+    onCyclePlayMode: () -> Unit,
     onSmartShuffle: (() -> Unit)? = null,
     onArtistClick: ((String, String) -> Unit)?,
     onToggleLibrary: (() -> Unit)?,
@@ -1025,10 +1076,12 @@ private fun ReleaseHeader(
                         size = RELEASE_SIDE_BUTTON,
                         modifier = Modifier.weight(1f),
                     )
+                    // One button for how the list plays: tap to step through
+                    // loop in order, shuffle and repeat one. Play uses it.
                     ActionPill(
-                        icon = TyBitIcons.Shuffle,
-                        label = stringResource(R.string.shuffle),
-                        onClick = onShuffle,
+                        icon = playMode.icon(),
+                        label = stringResource(playMode.labelRes()),
+                        onClick = onCyclePlayMode,
                         filled = false,
                         size = RELEASE_SIDE_BUTTON,
                         modifier = Modifier.weight(1f),
@@ -1045,10 +1098,11 @@ private fun ReleaseHeader(
                     }
                     return@Row
                 }
+                // The play mode, as on a device playlist — see [PlayMode].
                 CircleIconButton(
-                    icon = TyBitIcons.Shuffle,
-                    contentDescription = stringResource(R.string.shuffle),
-                    onClick = onShuffle,
+                    icon = playMode.icon(),
+                    contentDescription = stringResource(playMode.labelRes()),
+                    onClick = onCyclePlayMode,
                     haptic = Haptic.Resume,
                     size = RELEASE_SIDE_BUTTON,
                 )
@@ -2371,3 +2425,48 @@ private fun List<Song>.playtime(): String? {
         else -> stringResource(R.string.hours_minutes_short, (minutes / 60).toInt(), (minutes % 60).toInt())
     }
 }
+
+/** The glyph for each [PlayMode]: loop, shuffle, repeat one. */
+internal fun PlayMode.icon(): ImageVector = when (this) {
+    PlayMode.LOOP_ORDER -> Icons.Rounded.Repeat
+    PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
+    PlayMode.REPEAT_ONE -> Icons.Rounded.RepeatOne
+}
+
+internal fun PlayMode.labelRes(): Int = when (this) {
+    PlayMode.LOOP_ORDER -> R.string.play_mode_loop
+    PlayMode.SHUFFLE -> R.string.play_mode_shuffle
+    PlayMode.REPEAT_ONE -> R.string.play_mode_repeat_one
+}
+
+/** The artist a song is filed under for genres: its lead, not the whole credit. */
+private fun Song.leadArtist(): String =
+    artists.firstOrNull()?.name ?: artist.substringBefore(" & ").substringBefore(", ")
+
+/** All, then each genre the page's songs carry, most common first. */
+@Composable
+private fun GenreChips(genres: List<String>, selected: String?, onSelect: (String?) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = HEADER_GUTTER, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        (listOf<String?>(null) + genres).forEach { genre ->
+            val on = genre == selected
+            FilterChip(
+                selected = on,
+                onClick = { onSelect(if (on) null else genre) },
+                label = { Text(genre ?: stringResource(R.string.genre_all)) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            )
+        }
+    }
+}
+
+private const val GENRE_MIN_SONGS = 6
+private const val GENRE_CHIPS = 8

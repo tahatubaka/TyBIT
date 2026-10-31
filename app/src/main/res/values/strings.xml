@@ -1244,6 +1244,29 @@
     <string name="greeting_part_2">Good afternoon</string>
     <string name="greeting_part_3">Good evening</string>
     <string name="greeting_part_4">Good evening</string>
+    <!-- The album page play mode button (see PlayMode). -->
+    <string name="play_mode_loop">Loop in order</string>
+    <string name="play_mode_shuffle">Shuffle</string>
+    <string name="play_mode_repeat_one">Repeat one</string>
+    <string name="reset_order">Original order</string>
+    <string name="order_saved">Order saved</string>
+    <string name="genre_all">All</string>
+    <string name="move_to_folder">Move to folder</string>
+    <string name="new_folder">New folder name</string>
+    <string name="create_folder">Create</string>
+    <string name="remove_from_folder">Take out</string>
+    <string name="folder">Folder</string>
+    <string name="delete_folder">Delete folder</string>
+    <plurals name="folder_playlists">
+        <item quantity="one">Folder · %d playlist</item>
+        <item quantity="other">Folder · %d playlists</item>
+    </plurals>
+    <string name="car_mode">Car mode</string>
+    <string name="previous">Previous</string>
+    <string name="next">Next</string>
+    <string name="release_radar">New releases</string>
+    <string name="release_radar_subtitle">A notification when an artist you play a lot puts out something new.</string>
+    <string name="release_radar_title">New from %1$s</string>
     <string name="daylist_title">daylist · %1$s %2$s</string>
     <string name="daylist_subtitle">What you play around this time, plus something new</string>
     <string name="daylist_loading">Making your daylist…</string>
